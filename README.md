@@ -1,7 +1,7 @@
 ## structab
-Several simple functions for treating structures as tables
+Several simple functions for treating structs as tables.
 
-Sometimes it's useful to have a struct serve as a table, where each field
+Sometimes it's useful to have a `struct` serve as a table, where each field
 represents a column. This mostly works fine as-is, but occasionally it's
 nice to do slightly more complicated things, like concatenate the data
 from two tables, or query or index a subset of the rows in the table. One
@@ -12,28 +12,30 @@ to dump a large amount of data into an SQL table using the Database
 Toolbox.
 
 These functions consider a table to be:
-1. A scalar struct
+
+1. A scalar `struct`
 2. where each field is the same size in dimension 1 (rows)
 3. such that the corresponding row entry in each field, taken together,
    make the "row" of a table.
+
 Note that if you use the Database Toolbox, the results of SQL queries are
 returned in this format.
 
 These functions let you:
 * Swap which dimension is the "row" dimension (e.g., you may have code
-  operates on row vectors rather than column vectors): structab_swapdim
+  operates on row vectors rather than column vectors): `structab_swapdim`
 * Convert this to and from cell arrays where each cell represents an
-  item in a row: structab2cell, cell2structab
-* Convert this to and from struct arrays where each element represents
-  a "row": structab2arr, structarr2tab
-* Retrieve subsets of the table by index or condition: structab_index,
-  structab_lookup
+  item in a row: `structab2cell`, `cell2structab`
+* Convert this to and from `struct` arrays where each element represents
+  a "row": `structab2arr`, `structarr2tab`
+* Retrieve subsets of the table by index or condition: `structab_index`,
+  `structab_lookup`
 * For common types of tables (fields are either strings or numeric
-  scalars), quickly and easily dump to text files: structab_filedump
+  scalars), quickly and easily dump to text files: `structab_filedump`
 * For these types of tables, dump to an SQL table via the Database
-  Toolbox and a call to LOAD DATA INFILE -- for large amounts of data,
-  this is MUCH (up to three orders of magnitude in a test I did) faster
-  than using calls to INSERT.
+  Toolbox and a call to `LOAD DATA INFILE` -- for large amounts of data,
+  this is *much* (up to three orders of magnitude in a test I did) faster
+  than using calls to `INSERT`: `structab_sqldump`
 
 Basically, this is just a quick-and-dirty solution. For something more
 elegant, write a class.
