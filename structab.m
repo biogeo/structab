@@ -32,7 +32,7 @@
 %   * For these types of tables, dump to an SQL table via the Database
 %     Toolbox and a call to LOAD DATA INFILE -- for large amounts of data,
 %     this is MUCH (up to three orders of magnitude in a test I did) faster
-%     than using calls to INSERT.
+%     than using calls to INSERT: structab_sqldump
 %
 % Basically, this is just a quick-and-dirty solution. For something more
 % elegant, write a class.
