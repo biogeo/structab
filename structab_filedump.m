@@ -19,7 +19,8 @@ function output = structab_filedump(s, file, varargin)
 %     array or a struct with the same field names as s, where each element
 %     gives a format string for the corresponding field in s, of the type
 %     appropriate for passing to *printf functions. If not specified,
-%     string fields will be formatted with '%s', and numerics with '%g'.
+%     string fields will be formatted with '%s', and numerics with '%.17g'
+%     (17 digits is enough to fully specify double-precision floats).
 %   structab_filedump(...,'Parameter',value)
 %     Specify optional parameters:
 %       NullOutput: What will be written for missing/null values. Default
@@ -38,15 +39,6 @@ function output = structab_filedump(s, file, varargin)
 % 
 % At the moment, ONLY fields which are cell arrays of strings or numeric
 % vectors are permitted. Any other types will fail.
-% 
-% Note:
-%   To handle replacing NaNs with the null string, numeric arrays are
-%   preprocessed with num2str instead of sending directly to fprintf. The
-%   end result is that formatting field widths for numeric data are not
-%   necessarily respected. Since this is immaterial for my use case
-%   (dumping files for SQL input), I don't regard this as a bug and I won't
-%   bother to "fix" it, but it is worth noting should my future needs
-%   change, or someone else be using this code.
 
 fields = fieldnames(s);
 s = struct2cell(s); % Make it easier to iterate.
@@ -60,7 +52,7 @@ if ~all(is_field_vector) && all(is_field_string | is_field_numeric)
 end
 default_formats = cell(size(s));
 default_formats(is_field_string) = {'%s'};
-default_formats(is_field_numeric) = {'%g'};
+default_formats(is_field_numeric) = {'%.17g'};
 
 p = inputParser;
 p.addOptional('Format', default_formats);

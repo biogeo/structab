@@ -26,17 +26,15 @@ function cur = structab_sqldump(s, sqldb, table, varargin)
 %           true.
 %       FieldFormats: Specifies format strings for use with
 %           structab_filedump: see the documentation on the formats
-%           argument for more info. For SQL to read the fields properly,
-%           these shouldn't be too fancy, but in particular setting the
-%           precision option may be important for ensuring data is not lost
-%           in the transfer. E.g., if the SQL table represents a field as
-%           DECIMAL(M,2), a format string of '%.2f' would be appropriate.
-%           Or, if the field is floating point and you want to avoid loss
-%           of precision during the transfer to SQL, be sure to include
-%           enough digits in the output to represent the data up to the
-%           precision permitted by the type, e.g., '%.16e'. (About 16
-%           digits seems to be enough for doubles? But I haven't actually
-%           researched this so don't take my word for it.)
+%           argument of that function for more info. For SQL to read the
+%           fields properly, these shouldn't be too fancy, but in
+%           particular setting the precision option for floating point
+%           values may be important for  ensuring data is not lost in the
+%           transfer. However, by default, the format specifier '%.17g' is
+%           used for all numeric values, meaning 17 decimal digits are
+%           used, which is the minimum necessary to fully specify double
+%           values. SQL may truncate these values further depending on the
+%           data type.
 %       NansAreNull: Whether NaN values should be interpreted as NULLs by
 %           SQL. See structab_filedump for more info.
 %       NullString: A value in string fields that should be interpreted as
@@ -72,7 +70,16 @@ names_list = [names_list{:}];
 % names_list = sprintf('%s, ', fields{1:end-1});
 % names_list = sprintf('(%s%s)', names_list, fields{end});
 
-tmp = structab_filedump(s, [], opts.FieldFormats, passOpts);
+fieldFormats = opts.FieldFormats;
+% if ischar(fieldFormats)
+%     if strcmpi(fieldFormats, 'bySQLType')
+%         fieldFormats = guess_formats_from_sql(sqldb, table, names_list);
+%     elseif strcmpi(fieldFormats, 'byMatlabType')
+%         fieldFormats = [];
+%     end
+% end
+
+tmp = structab_filedump(s, [], fieldFormats, passOpts);
 
 try
     cmd = sprintf('LOAD DATA %s INFILE ''%s'' INTO TABLE %s (%s);', ...
@@ -83,3 +90,28 @@ catch e
     rethrow(e);
 end
 delete(tmp);
+
+
+% function fieldFormats = guess_formats_from_sql(sqldb, table, names_list)
+% % This is a bit hacky, but I don't know SQL well enough to know if there's
+% % a proper way to do this.
+% tableInfo = fetch(sqldb, sprintf('DESCRIBE %s;', table));
+% 
+% type_parsed = regexp(tableInfo.COLUMN_TYPE, ...
+%     '([^\(]+)\((\d+),(\d+)\)|([^\(]+)\((\d+)\)()|([^\(]+)()()', ...
+%     'once', 'tokens');
+% type_parsed = vertcat(type_parsed{:});
+% type_base = type_parsed(:,1);
+% type_M = type_parsed(:,2);
+% type_D = type_parsed(:,3);
+% % These are the basic conditions based on SQL data type:
+% %   1. If it's non-numeric, just use %s -- the user needs to format
+% %      properly.
+% %   2. If the type is float, use %.9e for full precision.
+% %   3. If the type is double, use %.17e for full precision.
+% %   4. If the type is float, double, or decimal, and has (M,D) parameters,
+% %      use %.Df for fixed precision
+% 
+% % Default format string is just '%s' for nonspecific types:
+% fieldFormats = repmat({'%s'}, size(tableInfo.COLUMN_TYPE));
+% 
