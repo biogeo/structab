@@ -19,23 +19,25 @@ These functions consider a table to be:
    make the "row" of a table.
 
 Note that if you use the Database Toolbox, the results of SQL queries are
-returned in this format.
+returned in this format when the option `DataReturnFormat` is `'structure'`.
 
 These functions let you:
-* Swap which dimension is the "row" dimension (e.g., you may have code
+* Swap which dimension is the "row" dimension (e.g., you may have code which
   operates on row vectors rather than column vectors): `structab_swapdim`
-* Convert this to and from cell arrays where each cell represents an
+* Convert tables to and from cell arrays where each cell represents an
   item in a row: `structab2cell`, `cell2structab`
-* Convert this to and from `struct` arrays where each element represents
+* Convert tables to and from `struct` arrays where each element represents
   a "row": `structab2arr`, `structarr2tab`
+* Concatenate several tables into one containing all their rows: `structab_cat`
 * Retrieve subsets of the table by index or condition: `structab_index`,
   `structab_lookup`
 * For common types of tables (fields are either strings or numeric
-  scalars), quickly and easily dump to text files: `structab_filedump`
+  scalars), quickly and easily dump to text files: `structab_textdump`
 * For these types of tables, dump to an SQL table via the Database
   Toolbox and a call to `LOAD DATA INFILE` -- for large amounts of data,
   this is *much* (up to three orders of magnitude in a test I did) faster
-  than using calls to `INSERT`: `structab_sqldump`
+  than using calls to `INSERT` (or, therefore, the Database Toolbox `datainsert`
+  function): `structab_sqldump`
 
-Basically, this is just a quick-and-dirty solution. For something more
-elegant, write a class.
+Basically, this is just a quick-and-dirty solution. For something more elegant,
+write a class.
