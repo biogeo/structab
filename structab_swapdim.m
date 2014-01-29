@@ -5,6 +5,7 @@ function [s, d] = structab_swapdim(s, d)
 %     Swaps the dimension d into the first dimension for all fields of s.
 %     This can allow other structab functions to operate on that dimension
 %     as rows of the table.
+%   
 %   [s, d] = structab_swapdim(s)
 %     Guesses d, the lowest dimension suitable to serve as the row index
 %     for a table. This is done by comparing the sizes of all fields and
