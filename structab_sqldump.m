@@ -72,7 +72,24 @@ function cur = structab_sqldump(s, sqldb, table, varargin)
 %             logical scalars. The NullNaNs, NullInfs, and NullString rules
 %             will be applied. Integer or logical class values will be
 %             formatted with %d, doubles with %.17g, and singles with %.9g.
-%         SQLFields: [{} | <struct> | <2xN cell array>]
+%         FieldNames: [{}* | <struct> | <2xN cell array>]
+%             Allows the fields to be set to different names in the SQL
+%             table. Can be supplied as a struct or as a 2xN cell array, as
+%             with ConstFields. The values of the struct fields, or the
+%             second row of the cell array, give the new names to be used
+%             in the SQL table. This may be particularly useful if your SQL
+%             table includes column names which are not valid Matlab field
+%             names.
+%         FieldVars [{}* | <struct> | <2xN cell array>]
+%             Like FieldNames, but instead of providing new column names,
+%             provides SQL user variable names. The data for the specified
+%             fields will be loaded into variables instead of columns,
+%             which may be used as part of the SQLFields code (see below).
+%             Note however that NullNaNs, NullInfs, and NullString will not
+%             apply to these fields, and so if that processing is needed it
+%             will have to be written manually as part of the SQLFields
+%             code.
+%         SQLFields: [{}* | <struct> | <2xN cell array>]
 %             Allows additional fields to be specified with SQL subquery.
 %             NOTE: THERE IS NO ATTEMPT TO PROTECT THIS FROM AN SQL
 %             INJECTION ATTACK. THIS CODE IS INTENDED FOR SAFE ENVIRONMENTS
@@ -85,18 +102,16 @@ function cur = structab_sqldump(s, sqldb, table, varargin)
 %             make no guarantees!
 %             These extra fields are given with a struct or a 2-by-N cell
 %             array, as with ConstFields, but the value is a string
-%             containing an SQL subquery. E.g., suppose you have a
-%             pre-existing table "subjects" with columns "name" and "id",
-%             and you are loading a large amount of data into different
-%             table pertaining to a particular subject, for which you have
-%             the name but not the id. Then you might supply:
-%                 {'subject';
-%                  '(SELECT id FROM subjects WHERE name = "David Bowie")'}
-%             This would cause all rows to have the field "subject" take
-%             David Bowie's subject id. (The same effect could be achieved
-%             using a ConstField and subsequently JOINing the tables, but
-%             this could have performance advantages under certain
-%             conditions.)
+%             containing an SQL subquery.
+%             Example:
+%               Suppose there is a table `subjects` with columns `name` and
+%               `id` already in the database. You are adding data to
+%               another table, and you have a field that stores subject
+%               name, but you want the SQL database to contain subject id
+%               instead. You could then call structab_sqldump with:
+%                 FieldVars: {'subjectName'; 'x'}
+%                 SQLField: {'subjectId';
+%                            '(SELECT id FROM subjects WHERE name = @x)'}
 %         Verbose: [true | false*]
 %             If true, displays the SQL query used. This can also be
 %             retrieved from the returned cursor object, of course. For
@@ -139,18 +154,26 @@ function cur = structab_sqldump(s, sqldb, table, varargin)
 %   <sqlCol> = <expr>
 % where <expr> is the raw supplied SQL expression.
 
+isBool = @(x)islogical(x)&&isscalar(x);
+isNullStrValid = @(x)(isBool(x)&&~x)||ischar(x);
+isFieldSpecValid = @(x)( ...
+    (isstruct(x) && isscalar(x)) || ...
+    (iscell(x) && (isempty(x) || size(x,1)==2)) );
+
 p = inputParser;
-p.addParamValue('UseLocal', true);
+p.addParamValue('UseLocal', true, isBool);
 p.addParamValue('ReplaceOrIgnore', '', ...
     @(x)ismember(upper(x),{'REPLACE','IGNORE',''}));
-p.addParamValue('NullNaNs', true);
-p.addParamValue('NullInfs', true);
-p.addParamValue('NullString', false);
-p.addParamValue('ConstFields', {});
-p.addParamValue('SQLFields', {});
-p.addParamValue('EscapeDelims', true);
-p.addParamValue('TempVarBase', 'structabv');
-p.addParamValue('Verbose', false);
+p.addParamValue('NullNaNs', true, isBool);
+p.addParamValue('NullInfs', true, isBool);
+p.addParamValue('NullString', false, isNullStrValid);
+p.addParamValue('FieldNames', {}, isFieldSpecValid);
+p.addParamValue('ConstFields', {}, isFieldSpecValid);
+p.addParamValue('SQLFields', {}, isFieldSpecValid);
+p.addParamValue('FieldVars', {}, isFieldSpecValid);
+p.addParamValue('EscapeDelims', true, isBool);
+p.addParamValue('TempVarBase', 'structabv', @ischar);
+p.addParamValue('Verbose', false, isBool);
 p.parse(varargin{:});
 opts = p.Results;
 
@@ -161,6 +184,22 @@ else
 end
 
 fields = fieldnames(s)';
+newFieldNames = fieldSpec(opts.FieldNames);
+if ~isempty(newFieldNames)
+    % Quote the supplied field names with `backticks` and double any
+    % backticks in them (since being "weird" is probably the reason this
+    % option is passed).
+    newFieldNames(2,:) = cleanSQLIdentifiers(newFieldNames(2,:));
+    [isFieldRenamed, renameInd] = ismember(fields, newFieldNames(1,:));
+    fields(isFieldRenamed) = newFieldNames(2, renameInd(isFieldRenamed));
+end
+fieldVars = fieldSpec(opts.FieldVars);
+isFieldVar = false(size(fields));
+if ~isempty(fieldVars)
+    fieldVars(2,:) = strcat('@', cleanSQLIdentifiers(fieldVars(2,:)));
+    [isFieldVar, renameInd] = ismember(fields, fieldVars(1,:));
+    fields(isFieldVar) = fieldVars(2, renameInd(isFieldVar));
+end
 str_fields = structfun(@iscellstr, s);
 float_fields = structfun(@isfloat, s);
 
@@ -169,11 +208,12 @@ varNames = strcat('@', opts.TempVarBase, num2cellstr(1:numel(fields)));
 setArgs = repmat({''}, size(fields));
 
 if ischar(opts.NullString)
+    nullString = regexprep(opts.NullString, '[''\\]', '\\$0');
     for i=1:numel(fields)
-        if str_fields(i)
+        if str_fields(i) && ~isFieldVar(i)
             fieldArgs(i) = varNames(i);
-            setArgs{i} = sprintf('%s = NULLIF(%s, "%s")', ...
-                fields{i}, varNames{i}, opts.NullString);
+            setArgs{i} = sprintf('%s = NULLIF(%s, ''%s'')', ...
+                fields{i}, varNames{i}, nullString);
         end
     end
 end
@@ -187,7 +227,7 @@ if opts.NullNaNs || opts.NullInfs
         nullStrs = 'Inf,-Inf';
     end
     for i=1:numel(fields)
-        if float_fields(i)
+        if float_fields(i) && ~isFieldVar(i)
             fieldArgs(i) = varNames(i);
             setArgs{i} = sprintf(...
                 ['%s = CASE WHEN FIND_IN_SET(%s, "%s") ' ...
@@ -197,11 +237,9 @@ if opts.NullNaNs || opts.NullInfs
     end
 end
 
-constFields = opts.ConstFields;
-if isstruct(constFields)
-    constFields = [
-        fieldnames(constFields)';
-        struct2cell(constFields)' ];
+constFields = fieldSpec(opts.ConstFields);
+if ~isempty(constFields)
+    constFields(1,:) = cleanSQLIdentifiers(constFields(1,:));
 end
 constArgs = cell(1,size(constFields,2));
 for i=1:numel(constArgs)
@@ -210,8 +248,8 @@ for i=1:numel(constArgs)
         if ischar(opts.NullString) && strcmp(constVal, opts.NullString)
             constVal = 'NULL';
         else
-            constVal = regexprep(constVal, '["\\]', '\\$0');
-            constVal = sprintf('"%s"', constVal);
+            constVal = regexprep(constVal, '[''\\]', '\\$0');
+            constVal = sprintf('''%s''', constVal);
         end
     elseif (isinteger(constVal) || islogical(constVal)) ...
             && isscalar(constVal)
@@ -234,17 +272,14 @@ for i=1:numel(constArgs)
 end
 
 
-sqlFields = opts.SQLFields;
-if isstruct(sqlFields)
-    sqlFields = [
-        fieldnames(sqlFields)';
-        struct2cell(sqlFields)' ];
+sqlFields = fieldSpec(opts.SQLFields);
+if ~isempty(sqlFields)
+    sqlFields(1,:) = cleanSQLIdentifiers(sqlFields(1,:));
 end
 sqlArgs = cell(1,size(sqlFields,2));
 for i=1:numel(sqlArgs)
     sqlArgs{i} = sprintf('%s = %s', sqlFields{1,i}, sqlFields{2,i});
 end
-
 
 fieldArgs(2,1:end-1) = {', '};
 fieldArgs(2,end) = {''};
@@ -276,3 +311,13 @@ catch e
 end
 
 delete(file);
+
+
+function s = fieldSpec(s)
+if isstruct(s)
+    s = [fieldnames(s)';
+        struct2cell(s)'];
+end
+
+function s = cleanSQLIdentifiers(s)
+s = strcat('`', regexprep(s, '`', '``'), '`');
