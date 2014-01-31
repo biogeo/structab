@@ -53,7 +53,7 @@ function [stab, nonUniform] = structarr2tab(sarr, default)
 %     in nonUniform correspond to the fields in stab according to the order
 %     of fieldnames(stab).
 
-if ~exist('defaults', 'var')
+if ~exist('default', 'var')
     default = [];
 end
 
